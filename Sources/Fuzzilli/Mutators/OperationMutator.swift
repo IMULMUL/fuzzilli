@@ -19,7 +19,7 @@ public class OperationMutator: BaseInstructionMutator {
     }
     
     public override func canMutate(_ instr: Instruction) -> Bool {
-        return instr.isParametric && instr.isMutable
+        return instr.isParametric
     }
 
     public override func mutate(_ instr: Instruction, _ b: ProgramBuilder) {
@@ -90,6 +90,8 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = UnaryOperation(chooseUniform(from: allUnaryOperators))
         case is BinaryOperation:
             newOp = BinaryOperation(chooseUniform(from: allBinaryOperators))
+        case is BinaryOperationAndReassign:
+            newOp = BinaryOperationAndReassign(chooseUniform(from: allBinaryOperators))
         case is Compare:
             newOp = Compare(chooseUniform(from: allComparators))
         case is LoadFromScope:

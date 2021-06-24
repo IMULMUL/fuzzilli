@@ -25,7 +25,8 @@ extension Operation {
         
         switch self {
         case is CallFunction,
-             is CallMethod:
+             is CallMethod,
+             is CallComputedMethod:
             // We assume that a constructor doesn't modify its arguments when called
             return true
         case is StoreProperty,
@@ -39,7 +40,8 @@ extension Operation {
     
     func reassigns(input inputIdx: Int) -> Bool {
         switch self {
-        case is Reassign:
+        case is Reassign,
+             is BinaryOperationAndReassign:
             return inputIdx == 0
         case let op as UnaryOperation:
             return op.op.reassignsInput
@@ -85,6 +87,37 @@ extension Instruction {
         }
         return false
     }
+
+    /// Returns true if the this and the given instruction can be folded into one.
+    /// This is generally possible if they are identical and pure, i.e. don't have side-effects.
+    func canFold(_ other: Instruction) -> Bool {
+        var canFold = false
+        switch (self.op, other.op) {
+        case (let op1 as LoadInteger, let op2 as LoadInteger):
+            canFold = op1.value == op2.value
+        case (let op1 as LoadBigInt, let op2 as LoadBigInt):
+            canFold = op1.value == op2.value
+        case (let op1 as LoadFloat, let op2 as LoadFloat):
+            canFold = op1.value == op2.value
+        case (let op1 as LoadString, let op2 as LoadString):
+            canFold = op1.value == op2.value
+        case (let op1 as LoadBoolean, let op2 as LoadBoolean):
+            canFold = op1.value == op2.value
+        case (is LoadUndefined, is LoadUndefined):
+            canFold = true
+        case (is LoadNull, is LoadNull):
+            canFold = true
+        case (let op1 as LoadRegExp, let op2 as LoadRegExp):
+            canFold = op1.value  == op2.value && op1.flags == op2.flags
+        case (let op1 as LoadBuiltin, let op2 as LoadBuiltin):
+            canFold = op1.builtinName  == op2.builtinName
+        default:
+            assert(self.op.name != other.op.name || !isPure)
+        }
+
+        assert(!canFold || isPure)
+        return canFold
+    }
 }
 
 extension Operation {
@@ -114,6 +147,9 @@ extension Operation {
             return endOp is BeginElse || endOp is EndIf
         case is BeginElse:
             return endOp is EndIf
+        case is BeginSwitch,
+             is BeginSwitchCase:
+            return endOp is BeginSwitchCase || endOp is EndSwitch
         case is BeginWhile:
             return endOp is EndWhile
         case is BeginDoWhile:
@@ -125,8 +161,10 @@ extension Operation {
         case is BeginForOf:
             return endOp is EndForOf
         case is BeginTry:
-            return endOp is BeginCatch
+            return endOp is BeginCatch || endOp is BeginFinally
         case is BeginCatch:
+            return endOp is BeginFinally || endOp is EndTryCatch
+        case is BeginFinally:
             return endOp is EndTryCatch
         case is BeginCodeString:
             return endOp is EndCodeString

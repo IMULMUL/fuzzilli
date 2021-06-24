@@ -46,22 +46,36 @@ public class Operation {
     }
     
     /// Possible attributes of an operation.
-    /// See Instruction.swift for an explanation of each of them.
     struct Attributes: OptionSet {
         let rawValue: UInt16
         
-        static let isPrimitive        = Attributes(rawValue: 1 << 0)
-        static let isLiteral          = Attributes(rawValue: 1 << 1)
-        static let isParametric       = Attributes(rawValue: 1 << 2)
-        static let isCall             = Attributes(rawValue: 1 << 3)
-        static let isBlockBegin       = Attributes(rawValue: 1 << 4)
-        static let isBlockEnd         = Attributes(rawValue: 1 << 5)
-        static let isLoopBegin        = Attributes(rawValue: 1 << 6)
-        static let isLoopEnd          = Attributes(rawValue: 1 << 7)
-        static let isInternal         = Attributes(rawValue: 1 << 8)
-        static let isJump             = Attributes(rawValue: 1 << 9)
-        static let isImmutable        = Attributes(rawValue: 1 << 10)
-        static let isVarargs          = Attributes(rawValue: 1 << 11)
+        // The operation is pure, i.e. returns the same output given
+        // the same inputs (in practice, for simplicity we only mark
+        // operations without inputs as pure) and doesn't have any
+        // side-effects. As such, two identical pure operations can
+        // always be replaced with just one.
+        static let isPure             = Attributes(rawValue: 1 << 0)
+        // The operation has parameters that can for example be mutated.
+        static let isParametric       = Attributes(rawValue: 1 << 1)
+        // The operation performs a subroutine call.
+        static let isCall             = Attributes(rawValue: 1 << 2)
+        // The operation is the start of a block.
+        static let isBlockBegin       = Attributes(rawValue: 1 << 3)
+        // The operation is the end of a block.
+        static let isBlockEnd         = Attributes(rawValue: 1 << 4)
+        // The operation is the start of a loop (and thus of a block).
+        static let isLoopBegin        = Attributes(rawValue: 1 << 5)
+        // The operation is the end of a loop (and thus of a block).
+        static let isLoopEnd          = Attributes(rawValue: 1 << 6)
+        // The operation is used for internal purposes and should not
+        // be visible to the user (e.g. appear in emitted samples).
+        static let isInternal         = Attributes(rawValue: 1 << 7)
+        // The operation behaves like an (unconditional) jump and
+        // so any following code will not be executed.
+        static let isJump             = Attributes(rawValue: 1 << 8)
+        // The operation can take a variable number of inputs. Existing
+        // inputs can be removed and new ones added.
+        static let isVarargs          = Attributes(rawValue: 1 << 9)
     }
 }
 
@@ -70,7 +84,7 @@ class LoadInteger: Operation {
     
     init(value: Int64) {
         self.value = value
-        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPrimitive, .isParametric, .isLiteral])
+        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPure, .isParametric])
     }
 }
 
@@ -80,7 +94,7 @@ class LoadBigInt: Operation {
     
     init(value: Int64) {
         self.value = value
-        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPrimitive, .isParametric, .isLiteral])
+        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPure, .isParametric])
     }
 }
 
@@ -89,7 +103,7 @@ class LoadFloat: Operation {
     
     init(value: Double) {
         self.value = value
-        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPrimitive, .isParametric, .isLiteral])
+        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPure, .isParametric])
     }
 }
 
@@ -98,7 +112,7 @@ class LoadString: Operation {
     
     init(value: String) {
         self.value = value
-        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPrimitive, .isParametric, .isLiteral])
+        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPure, .isParametric])
     }
 }
 
@@ -107,19 +121,19 @@ class LoadBoolean: Operation {
     
     init(value: Bool) {
         self.value = value
-        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPrimitive, .isParametric, .isLiteral])
+        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPure, .isParametric])
     }
 }
 
 class LoadUndefined: Operation {
     init() {
-        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPrimitive, .isLiteral])
+        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPure])
     }
 }
 
 class LoadNull: Operation {
     init() {
-        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPrimitive, .isLiteral])
+        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPure])
     }
 }
 
@@ -168,7 +182,7 @@ class LoadRegExp: Operation {
     init(value: String, flags: RegExpFlags) {
         self.value = value
         self.flags = flags
-        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPrimitive, .isLiteral])
+        super.init(numInputs: 0, numOutputs: 1, attributes: [.isPure, .isParametric])
     }
 }
 
@@ -178,7 +192,7 @@ class CreateObject: Operation {
     
     init(propertyNames: [String]) {
         self.propertyNames = propertyNames
-        var flags: Operation.Attributes = [.isVarargs, .isLiteral]
+        var flags: Operation.Attributes = [.isVarargs]
         if propertyNames.count > 0 {
             flags.insert(.isParametric)
         }
@@ -192,7 +206,7 @@ class CreateArray: Operation {
     }
     
     init(numInitialValues: Int) {
-        super.init(numInputs: numInitialValues, numOutputs: 1, attributes: [.isVarargs, .isLiteral])
+        super.init(numInputs: numInitialValues, numOutputs: 1, attributes: [.isVarargs])
     }
 }
 
@@ -207,7 +221,7 @@ class CreateObjectWithSpread: Operation {
     
     init(propertyNames: [String], numSpreads: Int) {
         self.propertyNames = propertyNames
-        var flags: Operation.Attributes = [.isVarargs, .isLiteral]
+        var flags: Operation.Attributes = [.isVarargs]
         if propertyNames.count > 0 {
             flags.insert(.isParametric)
         }
@@ -222,7 +236,24 @@ class CreateArrayWithSpread: Operation {
     init(numInitialValues: Int, spreads: [Bool]) {
         assert(spreads.count == numInitialValues)
         self.spreads = spreads
-        super.init(numInputs: numInitialValues, numOutputs: 1, attributes: [.isVarargs, .isLiteral, .isParametric])
+        super.init(numInputs: numInitialValues, numOutputs: 1, attributes: [.isVarargs, .isParametric])
+    }
+}
+
+class CreateTemplateString: Operation {
+    // Stores the string elements of the temaplate literal
+    let parts: [String]
+
+    var numInterpolatedValues: Int {
+        return numInputs
+    }
+
+    // This operation isn't parametric since it will most likely mutate imported templates (which would mostly be valid JS snippets) and
+    // replace them with random strings and/or other template strings that may not be syntactically and/or semantically valid.
+    init(parts: [String]) {
+        self.parts = parts
+        assert(parts.count > 0)
+        super.init(numInputs: parts.count - 1, numOutputs: 1, attributes: [.isVarargs])
     }
 }
 
@@ -415,6 +446,17 @@ class CallMethod: Operation {
     }
 }
 
+class CallComputedMethod: Operation {
+    var numArguments: Int {
+        return numInputs - 2
+    }
+
+    init(numArguments: Int) {
+        // reference object is the first input and method name is the second input
+        super.init(numInputs: numArguments + 2, numOutputs: 1, attributes: [.isVarargs, .isCall])
+    }
+}
+
 class CallFunction: Operation {
     var numArguments: Int {
         return numInputs - 1
@@ -452,7 +494,7 @@ class CallFunctionWithSpread: Operation {
     }
 }
 
-public enum UnaryOperator: String {
+public enum UnaryOperator: String, CaseIterable {
     case PreInc     = "++"
     case PreDec     = "--"
     case PostInc    = "++ "     // Raw value must be unique
@@ -476,7 +518,7 @@ public enum UnaryOperator: String {
 }
 
 // This array must be kept in sync with the UnaryOperator Enum in operations.proto
-let allUnaryOperators: [UnaryOperator] = [.PreInc, .PreDec, .PostInc, .PostDec, .LogicalNot, .BitwiseNot, .Plus, .Minus]
+let allUnaryOperators = UnaryOperator.allCases
 
 class UnaryOperation: Operation {
     let op: UnaryOperator
@@ -487,7 +529,7 @@ class UnaryOperation: Operation {
     }
 }
 
-public enum BinaryOperator: String {
+public enum BinaryOperator: String, CaseIterable {
     case Add      = "+"
     case Sub      = "-"
     case Mul      = "*"
@@ -509,7 +551,7 @@ public enum BinaryOperator: String {
 }
 
 // This array must be kept in sync with the BinaryOperator Enum in operations.proto
-let allBinaryOperators: [BinaryOperator] = [.Add, .Sub, .Mul, .Div, .Mod, .BitAnd, .BitOr, .LogicAnd, .LogicOr, .Xor, .LShift, .RShift, .Exp, .UnRShift]
+let allBinaryOperators = BinaryOperator.allCases
 
 class BinaryOperation: Operation {
     let op: BinaryOperator
@@ -517,6 +559,16 @@ class BinaryOperation: Operation {
     init(_ op: BinaryOperator) {
         self.op = op
         super.init(numInputs: 2, numOutputs: 1, attributes: [.isParametric])
+    }
+}
+
+/// Assigns a value to its left operand based on the value of its right operand.
+class BinaryOperationAndReassign: Operation {
+    let op: BinaryOperator
+
+    init(_ op: BinaryOperator) {
+        self.op = op
+        super.init(numInputs: 2, numOutputs: 0)
     }
 }
 
@@ -561,14 +613,21 @@ class Compare: Operation {
     }
 }
 
+/// Allows generation of conditional (i.e. condition ? exprIfTrue : exprIfFalse) statements
+class ConditionalOperation: Operation {
+    init() {
+        super.init(numInputs: 3, numOutputs: 1)
+    }
+}
+
 /// An operation that will be lifted to a given string. The string can use %@ placeholders which
-/// will be replaced by the input variables during lowering. Eval operations will also never be mutated.
+/// will be replaced by the expressions for the input variables during lifting.
 class Eval: Operation {
     let code: String
     
     init(_ string: String, numArguments: Int) {
         self.code = string
-        super.init(numInputs: numArguments, numOutputs: 0, numInnerOutputs: 0, attributes: [.isImmutable])
+        super.init(numInputs: numArguments, numOutputs: 0, numInnerOutputs: 0)
     }
 }
 
@@ -610,7 +669,7 @@ class Nop: Operation {
     // which needs to replace instructions with NOPs while keeping the variable numbers
     // contiguous. They can also serve as placeholders for future instructions.
     init(numOutputs: Int = 0) {
-        super.init(numInputs: 0, numOutputs: numOutputs, attributes: [.isPrimitive])
+        super.init(numInputs: 0, numOutputs: numOutputs)
     }
 }
 
@@ -743,6 +802,29 @@ class EndIf: ControlFlowOperation {
     }
 }
 
+/// The block content is the body of the default case
+class BeginSwitch: ControlFlowOperation {
+    init() {
+        super.init(numInputs: 1, attributes: [.isBlockBegin])
+    }
+}
+
+class BeginSwitchCase: ControlFlowOperation {
+    /// If true, causes the preceding case to fall through to it (and so no "break;" is emitted by the Lifter)
+    let fallsThrough: Bool
+
+    init(fallsThrough: Bool) {
+        self.fallsThrough = fallsThrough
+        super.init(numInputs: 1, attributes: [.isBlockBegin, .isBlockEnd])
+    }
+}
+
+class EndSwitch: ControlFlowOperation {
+    init() {
+        super.init(numInputs: 0, attributes: [.isBlockEnd])
+    }
+}
+
 class BeginWhile: ControlFlowOperation {
     let comparator: Comparator
     init(comparator: Comparator) {
@@ -837,6 +919,12 @@ class BeginTry: ControlFlowOperation {
 class BeginCatch: ControlFlowOperation {
     init() {
         super.init(numInputs: 0, numInnerOutputs: 1, attributes: [.isBlockBegin, .isBlockEnd])
+    }
+}
+
+class BeginFinally: ControlFlowOperation {
+    init() {
+        super.init(numInputs: 0, attributes: [.isBlockBegin, .isBlockEnd])
     }
 }
 

@@ -225,6 +225,14 @@ public struct Fuzzilli_Protobuf_Instruction {
     set {operation = .createArray(newValue)}
   }
 
+  public var createTemplateString: Fuzzilli_Protobuf_CreateTemplateString {
+    get {
+      if case .createTemplateString(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_CreateTemplateString()
+    }
+    set {operation = .createTemplateString(newValue)}
+  }
+
   public var createObjectWithSpread: Fuzzilli_Protobuf_CreateObjectWithSpread {
     get {
       if case .createObjectWithSpread(let v)? = operation {return v}
@@ -497,6 +505,14 @@ public struct Fuzzilli_Protobuf_Instruction {
     set {operation = .callMethod(newValue)}
   }
 
+  public var callComputedMethod: Fuzzilli_Protobuf_CallComputedMethod {
+    get {
+      if case .callComputedMethod(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_CallComputedMethod()
+    }
+    set {operation = .callComputedMethod(newValue)}
+  }
+
   public var callFunction: Fuzzilli_Protobuf_CallFunction {
     get {
       if case .callFunction(let v)? = operation {return v}
@@ -537,6 +553,14 @@ public struct Fuzzilli_Protobuf_Instruction {
     set {operation = .binaryOperation(newValue)}
   }
 
+  public var binaryOperationAndReassign: Fuzzilli_Protobuf_BinaryOperationAndReassign {
+    get {
+      if case .binaryOperationAndReassign(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_BinaryOperationAndReassign()
+    }
+    set {operation = .binaryOperationAndReassign(newValue)}
+  }
+
   public var dup: Fuzzilli_Protobuf_Dup {
     get {
       if case .dup(let v)? = operation {return v}
@@ -559,6 +583,14 @@ public struct Fuzzilli_Protobuf_Instruction {
       return Fuzzilli_Protobuf_Compare()
     }
     set {operation = .compare(newValue)}
+  }
+
+  public var conditionalOperation: Fuzzilli_Protobuf_ConditionalOperation {
+    get {
+      if case .conditionalOperation(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_ConditionalOperation()
+    }
+    set {operation = .conditionalOperation(newValue)}
   }
 
   public var eval: Fuzzilli_Protobuf_Eval {
@@ -681,6 +713,30 @@ public struct Fuzzilli_Protobuf_Instruction {
     set {operation = .endIf(newValue)}
   }
 
+  public var beginSwitch: Fuzzilli_Protobuf_BeginSwitch {
+    get {
+      if case .beginSwitch(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_BeginSwitch()
+    }
+    set {operation = .beginSwitch(newValue)}
+  }
+
+  public var beginSwitchCase: Fuzzilli_Protobuf_BeginSwitchCase {
+    get {
+      if case .beginSwitchCase(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_BeginSwitchCase()
+    }
+    set {operation = .beginSwitchCase(newValue)}
+  }
+
+  public var endSwitch: Fuzzilli_Protobuf_EndSwitch {
+    get {
+      if case .endSwitch(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_EndSwitch()
+    }
+    set {operation = .endSwitch(newValue)}
+  }
+
   public var beginWhile: Fuzzilli_Protobuf_BeginWhile {
     get {
       if case .beginWhile(let v)? = operation {return v}
@@ -793,6 +849,14 @@ public struct Fuzzilli_Protobuf_Instruction {
     set {operation = .beginCatch(newValue)}
   }
 
+  public var beginFinally: Fuzzilli_Protobuf_BeginFinally {
+    get {
+      if case .beginFinally(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_BeginFinally()
+    }
+    set {operation = .beginFinally(newValue)}
+  }
+
   public var endTryCatch: Fuzzilli_Protobuf_EndTryCatch {
     get {
       if case .endTryCatch(let v)? = operation {return v}
@@ -864,6 +928,7 @@ public struct Fuzzilli_Protobuf_Instruction {
     case loadRegExp(Fuzzilli_Protobuf_LoadRegExp)
     case createObject(Fuzzilli_Protobuf_CreateObject)
     case createArray(Fuzzilli_Protobuf_CreateArray)
+    case createTemplateString(Fuzzilli_Protobuf_CreateTemplateString)
     case createObjectWithSpread(Fuzzilli_Protobuf_CreateObjectWithSpread)
     case createArrayWithSpread(Fuzzilli_Protobuf_CreateArrayWithSpread)
     case loadBuiltin(Fuzzilli_Protobuf_LoadBuiltin)
@@ -898,14 +963,17 @@ public struct Fuzzilli_Protobuf_Instruction {
     case yieldEach(Fuzzilli_Protobuf_YieldEach)
     case await(Fuzzilli_Protobuf_Await)
     case callMethod(Fuzzilli_Protobuf_CallMethod)
+    case callComputedMethod(Fuzzilli_Protobuf_CallComputedMethod)
     case callFunction(Fuzzilli_Protobuf_CallFunction)
     case construct(Fuzzilli_Protobuf_Construct)
     case callFunctionWithSpread(Fuzzilli_Protobuf_CallFunctionWithSpread)
     case unaryOperation(Fuzzilli_Protobuf_UnaryOperation)
     case binaryOperation(Fuzzilli_Protobuf_BinaryOperation)
+    case binaryOperationAndReassign(Fuzzilli_Protobuf_BinaryOperationAndReassign)
     case dup(Fuzzilli_Protobuf_Dup)
     case reassign(Fuzzilli_Protobuf_Reassign)
     case compare(Fuzzilli_Protobuf_Compare)
+    case conditionalOperation(Fuzzilli_Protobuf_ConditionalOperation)
     case eval(Fuzzilli_Protobuf_Eval)
     case beginClassDefinition(Fuzzilli_Protobuf_BeginClassDefinition)
     case beginMethodDefinition(Fuzzilli_Protobuf_BeginMethodDefinition)
@@ -921,6 +989,9 @@ public struct Fuzzilli_Protobuf_Instruction {
     case beginIf(Fuzzilli_Protobuf_BeginIf)
     case beginElse(Fuzzilli_Protobuf_BeginElse)
     case endIf(Fuzzilli_Protobuf_EndIf)
+    case beginSwitch(Fuzzilli_Protobuf_BeginSwitch)
+    case beginSwitchCase(Fuzzilli_Protobuf_BeginSwitchCase)
+    case endSwitch(Fuzzilli_Protobuf_EndSwitch)
     case beginWhile(Fuzzilli_Protobuf_BeginWhile)
     case endWhile(Fuzzilli_Protobuf_EndWhile)
     case beginDoWhile(Fuzzilli_Protobuf_BeginDoWhile)
@@ -935,6 +1006,7 @@ public struct Fuzzilli_Protobuf_Instruction {
     case `continue`(Fuzzilli_Protobuf_Continue)
     case beginTry(Fuzzilli_Protobuf_BeginTry)
     case beginCatch(Fuzzilli_Protobuf_BeginCatch)
+    case beginFinally(Fuzzilli_Protobuf_BeginFinally)
     case endTryCatch(Fuzzilli_Protobuf_EndTryCatch)
     case throwException(Fuzzilli_Protobuf_ThrowException)
     case beginCodeString(Fuzzilli_Protobuf_BeginCodeString)
@@ -991,6 +1063,10 @@ public struct Fuzzilli_Protobuf_Instruction {
       }()
       case (.createArray, .createArray): return {
         guard case .createArray(let l) = lhs, case .createArray(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.createTemplateString, .createTemplateString): return {
+        guard case .createTemplateString(let l) = lhs, case .createTemplateString(let r) = rhs else { preconditionFailure() }
         return l == r
       }()
       case (.createObjectWithSpread, .createObjectWithSpread): return {
@@ -1129,6 +1205,10 @@ public struct Fuzzilli_Protobuf_Instruction {
         guard case .callMethod(let l) = lhs, case .callMethod(let r) = rhs else { preconditionFailure() }
         return l == r
       }()
+      case (.callComputedMethod, .callComputedMethod): return {
+        guard case .callComputedMethod(let l) = lhs, case .callComputedMethod(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       case (.callFunction, .callFunction): return {
         guard case .callFunction(let l) = lhs, case .callFunction(let r) = rhs else { preconditionFailure() }
         return l == r
@@ -1149,6 +1229,10 @@ public struct Fuzzilli_Protobuf_Instruction {
         guard case .binaryOperation(let l) = lhs, case .binaryOperation(let r) = rhs else { preconditionFailure() }
         return l == r
       }()
+      case (.binaryOperationAndReassign, .binaryOperationAndReassign): return {
+        guard case .binaryOperationAndReassign(let l) = lhs, case .binaryOperationAndReassign(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       case (.dup, .dup): return {
         guard case .dup(let l) = lhs, case .dup(let r) = rhs else { preconditionFailure() }
         return l == r
@@ -1159,6 +1243,10 @@ public struct Fuzzilli_Protobuf_Instruction {
       }()
       case (.compare, .compare): return {
         guard case .compare(let l) = lhs, case .compare(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.conditionalOperation, .conditionalOperation): return {
+        guard case .conditionalOperation(let l) = lhs, case .conditionalOperation(let r) = rhs else { preconditionFailure() }
         return l == r
       }()
       case (.eval, .eval): return {
@@ -1221,6 +1309,18 @@ public struct Fuzzilli_Protobuf_Instruction {
         guard case .endIf(let l) = lhs, case .endIf(let r) = rhs else { preconditionFailure() }
         return l == r
       }()
+      case (.beginSwitch, .beginSwitch): return {
+        guard case .beginSwitch(let l) = lhs, case .beginSwitch(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.beginSwitchCase, .beginSwitchCase): return {
+        guard case .beginSwitchCase(let l) = lhs, case .beginSwitchCase(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.endSwitch, .endSwitch): return {
+        guard case .endSwitch(let l) = lhs, case .endSwitch(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       case (.beginWhile, .beginWhile): return {
         guard case .beginWhile(let l) = lhs, case .beginWhile(let r) = rhs else { preconditionFailure() }
         return l == r
@@ -1275,6 +1375,10 @@ public struct Fuzzilli_Protobuf_Instruction {
       }()
       case (.beginCatch, .beginCatch): return {
         guard case .beginCatch(let l) = lhs, case .beginCatch(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.beginFinally, .beginFinally): return {
+        guard case .beginFinally(let l) = lhs, case .beginFinally(let r) = rhs else { preconditionFailure() }
         return l == r
       }()
       case (.endTryCatch, .endTryCatch): return {
@@ -1430,6 +1534,7 @@ extension Fuzzilli_Protobuf_Instruction: SwiftProtobuf.Message, SwiftProtobuf._M
     77: .same(proto: "loadRegExp"),
     11: .same(proto: "createObject"),
     12: .same(proto: "createArray"),
+    102: .same(proto: "createTemplateString"),
     13: .same(proto: "createObjectWithSpread"),
     14: .same(proto: "createArrayWithSpread"),
     15: .same(proto: "loadBuiltin"),
@@ -1464,14 +1569,17 @@ extension Fuzzilli_Protobuf_Instruction: SwiftProtobuf.Message, SwiftProtobuf._M
     74: .same(proto: "yieldEach"),
     75: .same(proto: "await"),
     31: .same(proto: "callMethod"),
+    96: .same(proto: "callComputedMethod"),
     32: .same(proto: "callFunction"),
     33: .same(proto: "construct"),
     34: .same(proto: "callFunctionWithSpread"),
     35: .same(proto: "unaryOperation"),
     36: .same(proto: "binaryOperation"),
+    97: .same(proto: "binaryOperationAndReassign"),
     37: .same(proto: "dup"),
     38: .same(proto: "reassign"),
     39: .same(proto: "compare"),
+    98: .same(proto: "conditionalOperation"),
     40: .same(proto: "eval"),
     87: .same(proto: "beginClassDefinition"),
     88: .same(proto: "beginMethodDefinition"),
@@ -1487,6 +1595,9 @@ extension Fuzzilli_Protobuf_Instruction: SwiftProtobuf.Message, SwiftProtobuf._M
     45: .same(proto: "beginIf"),
     46: .same(proto: "beginElse"),
     47: .same(proto: "endIf"),
+    99: .same(proto: "beginSwitch"),
+    100: .same(proto: "beginSwitchCase"),
+    101: .same(proto: "endSwitch"),
     48: .same(proto: "beginWhile"),
     49: .same(proto: "endWhile"),
     50: .same(proto: "beginDoWhile"),
@@ -1501,6 +1612,7 @@ extension Fuzzilli_Protobuf_Instruction: SwiftProtobuf.Message, SwiftProtobuf._M
     59: .same(proto: "continue"),
     60: .same(proto: "beginTry"),
     61: .same(proto: "beginCatch"),
+    95: .same(proto: "beginFinally"),
     62: .same(proto: "endTryCatch"),
     63: .same(proto: "throwException"),
     81: .same(proto: "beginCodeString"),
@@ -2315,6 +2427,78 @@ extension Fuzzilli_Protobuf_Instruction: SwiftProtobuf.Message, SwiftProtobuf._M
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.operation = .storeSuperProperty(v)}
       }()
+      case 95: try {
+        var v: Fuzzilli_Protobuf_BeginFinally?
+        if let current = self.operation {
+          try decoder.handleConflictingOneOf()
+          if case .beginFinally(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.operation = .beginFinally(v)}
+      }()
+      case 96: try {
+        var v: Fuzzilli_Protobuf_CallComputedMethod?
+        if let current = self.operation {
+          try decoder.handleConflictingOneOf()
+          if case .callComputedMethod(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.operation = .callComputedMethod(v)}
+      }()
+      case 97: try {
+        var v: Fuzzilli_Protobuf_BinaryOperationAndReassign?
+        if let current = self.operation {
+          try decoder.handleConflictingOneOf()
+          if case .binaryOperationAndReassign(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.operation = .binaryOperationAndReassign(v)}
+      }()
+      case 98: try {
+        var v: Fuzzilli_Protobuf_ConditionalOperation?
+        if let current = self.operation {
+          try decoder.handleConflictingOneOf()
+          if case .conditionalOperation(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.operation = .conditionalOperation(v)}
+      }()
+      case 99: try {
+        var v: Fuzzilli_Protobuf_BeginSwitch?
+        if let current = self.operation {
+          try decoder.handleConflictingOneOf()
+          if case .beginSwitch(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.operation = .beginSwitch(v)}
+      }()
+      case 100: try {
+        var v: Fuzzilli_Protobuf_BeginSwitchCase?
+        if let current = self.operation {
+          try decoder.handleConflictingOneOf()
+          if case .beginSwitchCase(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.operation = .beginSwitchCase(v)}
+      }()
+      case 101: try {
+        var v: Fuzzilli_Protobuf_EndSwitch?
+        if let current = self.operation {
+          try decoder.handleConflictingOneOf()
+          if case .endSwitch(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.operation = .endSwitch(v)}
+      }()
+      case 102: try {
+        var v: Fuzzilli_Protobuf_CreateTemplateString?
+        if let current = self.operation {
+          try decoder.handleConflictingOneOf()
+          if case .createTemplateString(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.operation = .createTemplateString(v)}
+      }()
       default: break
       }
     }
@@ -2683,6 +2867,38 @@ extension Fuzzilli_Protobuf_Instruction: SwiftProtobuf.Message, SwiftProtobuf._M
     case .storeSuperProperty?: try {
       guard case .storeSuperProperty(let v)? = self.operation else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 93)
+    }()
+    case .beginFinally?: try {
+      guard case .beginFinally(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 95)
+    }()
+    case .callComputedMethod?: try {
+      guard case .callComputedMethod(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 96)
+    }()
+    case .binaryOperationAndReassign?: try {
+      guard case .binaryOperationAndReassign(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 97)
+    }()
+    case .conditionalOperation?: try {
+      guard case .conditionalOperation(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 98)
+    }()
+    case .beginSwitch?: try {
+      guard case .beginSwitch(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 99)
+    }()
+    case .beginSwitchCase?: try {
+      guard case .beginSwitchCase(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 100)
+    }()
+    case .endSwitch?: try {
+      guard case .endSwitch(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 101)
+    }()
+    case .createTemplateString?: try {
+      guard case .createTemplateString(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 102)
     }()
     case nil: break
     }

@@ -127,17 +127,14 @@ public struct Instruction {
     /// Flag accessors.
     ///
 
-    /// A primitive instructions is one that yields a primitive value and has no other side effects.
-    public var isPrimitive: Bool {
-        return op.attributes.contains(.isPrimitive)
+    /// A pure instructions returns the same value given the same inputs and has no side effects.
+    public var isPure: Bool {
+        return op.attributes.contains(.isPure)
     }
 
-    /// A literal in the target language.
-    public var isLiteral: Bool {
-        return op.attributes.contains(.isLiteral)
-    }
-
-    /// Is this instruction parametric, i.e. contains any mutable values?
+    /// Is this instruction parametric, i.e. can/should this operation be mutated by the OperationMutator?
+    /// The rough rule of thumbs is that every Operation class that has members other than those already in the Operation class are parametric.
+    /// For example integer values (LoadInteger), string values (LoadProperty and CallMethod), or Arrays (CallFunctionWithSpread).
     public var isParametric: Bool {
         return op.attributes.contains(.isParametric)
     }
@@ -196,16 +193,6 @@ public struct Instruction {
     /// An instruction is considered a jump if it unconditionally transfers control flow somewhere else and doesn't "come back" to the following instruction.
     public var isJump: Bool {
         return op.attributes.contains(.isJump)
-    }
-
-    /// Whether this instruction should not be mutated.
-    public var isImmutable: Bool {
-        return op.attributes.contains(.isImmutable)
-    }
-
-    /// Whether this instruction can be mutated.
-    public var isMutable: Bool {
-        return !isImmutable
     }
 
     /// Whether this instruction is an internal instruction that should not "leak" into
@@ -303,6 +290,8 @@ extension Instruction: ProtobufConvertible {
                 $0.createArray = Fuzzilli_Protobuf_CreateArray()
             case let op as CreateArrayWithSpread:
                 $0.createArrayWithSpread = Fuzzilli_Protobuf_CreateArrayWithSpread.with { $0.spreads = op.spreads }
+            case let op as CreateTemplateString:
+                $0.createTemplateString = Fuzzilli_Protobuf_CreateTemplateString.with { $0.parts = op.parts }
             case let op as LoadBuiltin:
                 $0.loadBuiltin = Fuzzilli_Protobuf_LoadBuiltin.with { $0.builtinName = op.builtinName }
             case let op as LoadProperty:
@@ -367,6 +356,8 @@ extension Instruction: ProtobufConvertible {
                 $0.await = Fuzzilli_Protobuf_Await()
             case let op as CallMethod:
                 $0.callMethod = Fuzzilli_Protobuf_CallMethod.with { $0.methodName = op.methodName }
+            case is CallComputedMethod:
+                $0.callComputedMethod = Fuzzilli_Protobuf_CallComputedMethod()
             case is CallFunction:
                 $0.callFunction = Fuzzilli_Protobuf_CallFunction()
             case is Construct:
@@ -377,12 +368,16 @@ extension Instruction: ProtobufConvertible {
                 $0.unaryOperation = Fuzzilli_Protobuf_UnaryOperation.with { $0.op = convertEnum(op.op, allUnaryOperators) }
             case let op as BinaryOperation:
                 $0.binaryOperation = Fuzzilli_Protobuf_BinaryOperation.with { $0.op = convertEnum(op.op, allBinaryOperators) }
+            case let op as BinaryOperationAndReassign:
+                $0.binaryOperationAndReassign = Fuzzilli_Protobuf_BinaryOperationAndReassign.with { $0.op = convertEnum(op.op, allBinaryOperators) }
             case is Dup:
                 $0.dup = Fuzzilli_Protobuf_Dup()
             case is Reassign:
                 $0.reassign = Fuzzilli_Protobuf_Reassign()
             case let op as Compare:
                 $0.compare = Fuzzilli_Protobuf_Compare.with { $0.op = convertEnum(op.op, allComparators) }
+            case is ConditionalOperation:
+                $0.conditionalOperation = Fuzzilli_Protobuf_ConditionalOperation()
             case let op as Eval:
                 $0.eval = Fuzzilli_Protobuf_Eval.with { $0.code = op.code }
             case let op as BeginClassDefinition:
@@ -419,6 +414,12 @@ extension Instruction: ProtobufConvertible {
                 $0.beginElse = Fuzzilli_Protobuf_BeginElse()
             case is EndIf:
                 $0.endIf = Fuzzilli_Protobuf_EndIf()
+            case is BeginSwitch:
+                $0.beginSwitch = Fuzzilli_Protobuf_BeginSwitch()
+            case let op as BeginSwitchCase:
+                $0.beginSwitchCase = Fuzzilli_Protobuf_BeginSwitchCase.with { $0.fallsThrough = op.fallsThrough }
+            case is EndSwitch:
+                $0.endSwitch = Fuzzilli_Protobuf_EndSwitch()
             case let op as BeginWhile:
                 $0.beginWhile = Fuzzilli_Protobuf_BeginWhile.with { $0.comparator = convertEnum(op.comparator, allComparators) }
             case is EndWhile:
@@ -450,6 +451,8 @@ extension Instruction: ProtobufConvertible {
                 $0.beginTry = Fuzzilli_Protobuf_BeginTry()
             case is BeginCatch:
                 $0.beginCatch = Fuzzilli_Protobuf_BeginCatch()
+            case is BeginFinally:
+                $0.beginFinally = Fuzzilli_Protobuf_BeginFinally()
             case is EndTryCatch:
                 $0.endTryCatch = Fuzzilli_Protobuf_EndTryCatch()
             case is ThrowException:
@@ -524,6 +527,8 @@ extension Instruction: ProtobufConvertible {
             op = CreateObjectWithSpread(propertyNames: p.propertyNames, numSpreads: inouts.count - 1 - p.propertyNames.count)
         case .createArrayWithSpread(let p):
             op = CreateArrayWithSpread(numInitialValues: inouts.count - 1, spreads: p.spreads)
+        case .createTemplateString(let p):
+            op = CreateTemplateString(parts: p.parts)
         case .loadBuiltin(let p):
             op = LoadBuiltin(builtinName: p.builtinName)
         case .loadProperty(let p):
@@ -588,6 +593,9 @@ extension Instruction: ProtobufConvertible {
             op = Await()
         case .callMethod(let p):
             op = CallMethod(methodName: p.methodName, numArguments: inouts.count - 2)
+        case .callComputedMethod(_):
+            // We subtract 3 from the inouts count since the first two elements are the callee and method and the last element is the output variable
+            op = CallComputedMethod(numArguments: inouts.count - 3)
         case .callFunction(_):
             op = CallFunction(numArguments: inouts.count - 2)
         case .construct(_):
@@ -598,12 +606,16 @@ extension Instruction: ProtobufConvertible {
             op = UnaryOperation(try convertEnum(p.op, allUnaryOperators))
         case .binaryOperation(let p):
             op = BinaryOperation(try convertEnum(p.op, allBinaryOperators))
+        case .binaryOperationAndReassign(let p):
+            op = BinaryOperationAndReassign(try convertEnum(p.op, allBinaryOperators))
         case .dup(_):
             op = Dup()
         case .reassign(_):
             op = Reassign()
         case .compare(let p):
             op = Compare(try convertEnum(p.op, allComparators))
+        case .conditionalOperation(_):
+            op = ConditionalOperation()
         case .eval(let p):
             op = Eval(p.code, numArguments: inouts.count)
         case .beginClassDefinition(let p):
@@ -637,6 +649,12 @@ extension Instruction: ProtobufConvertible {
             op = BeginElse()
         case .endIf(_):
             op = EndIf()
+        case .beginSwitch(_):
+            op = BeginSwitch()
+        case .beginSwitchCase(let p):
+            op = BeginSwitchCase(fallsThrough: p.fallsThrough)
+        case .endSwitch(_):
+            op = EndSwitch()
         case .beginWhile(let p):
             op = BeginWhile(comparator: try convertEnum(p.comparator, allComparators))
         case .endWhile(_):
@@ -665,6 +683,8 @@ extension Instruction: ProtobufConvertible {
             op = BeginTry()
         case .beginCatch(_):
             op = BeginCatch()
+        case .beginFinally(_):
+            op = BeginFinally()
         case .endTryCatch(_):
             op = EndTryCatch()
         case .throwException(_):

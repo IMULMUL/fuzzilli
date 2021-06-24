@@ -187,7 +187,8 @@ public class JavaScriptLifter: Lifter {
                 output = ObjectLiteral.new("{" + properties.joined(separator: ",") + "}")
 
             case is CreateArray:
-                let elems = instr.inputs.map({ expr(for: $0).text }).joined(separator: ",")
+                // When creating arrays, treat undefined elements as holes. This also relies on literals always being inlined.
+                let elems = instr.inputs.map({ let text = expr(for: $0).text; return text == "undefined" ? "" : text }).joined(separator: ",")
                 output = ArrayLiteral.new("[" + elems + "]")
 
             case let op as CreateObjectWithSpread:
@@ -211,6 +212,15 @@ public class JavaScriptLifter: Lifter {
                     }
                 }
                 output = ArrayLiteral.new("[" + elems.joined(separator: ",") + "]")
+
+            case let op as CreateTemplateString:
+                assert(!op.parts.isEmpty)
+                assert(op.parts.count == instr.numInputs + 1)
+                var parts = [op.parts[0]]
+                for i in 1..<op.parts.count {
+                    parts.append("${\(input(i - 1))}\(op.parts[i])")
+                }
+                output = Literal.new("`" + parts.joined() + "`")
 
             case let op as LoadBuiltin:
                 output = Identifier.new(op.builtinName)
@@ -318,6 +328,11 @@ public class JavaScriptLifter: Lifter {
                 let method = MemberExpression.new() <> input(0) <> "." <> op.methodName
                 output = CallExpression.new() <> method <> "(" <> arguments.joined(separator: ",") <> ")"
 
+            case is CallComputedMethod:
+                let arguments = instr.inputs.dropFirst(2).map({ expr(for: $0).text })
+                let method = MemberExpression.new() <> input(0) <> "[" <> input(1) <> "]"
+                output = CallExpression.new() <> method <> "(" <> arguments.joined(separator: ",") <> ")"
+
             case is Construct:
                 let arguments = instr.inputs.dropFirst().map({ expr(for: $0).text })
                 output = NewExpression.new() <> "new " <> input(0) <> "(" <> arguments.joined(separator: ",") <> ")"
@@ -343,6 +358,9 @@ public class JavaScriptLifter: Lifter {
             case let op as BinaryOperation:
                 output = BinaryExpression.new() <> input(0) <> " " <> op.op.token <> " " <> input(1)
 
+            case let op as BinaryOperationAndReassign:
+                w.emit("\(input(0)) \(op.op.token)= \(input(1));")
+
             case is Dup:
                 w.emit("\(decl(instr.output)) = \(input(0));")
 
@@ -351,6 +369,9 @@ public class JavaScriptLifter: Lifter {
 
             case let op as Compare:
                 output = BinaryExpression.new() <> input(0) <> " " <> op.op.token <> " " <> input(1)
+
+            case is ConditionalOperation:
+                output = TernaryExpression.new() <> input(0) <> " ? " <> input(1) <> " : " <> input(2)
 
             case let op as Eval:
                 // Woraround until Strings implement the CVarArg protocol in the linux Foundation library...
@@ -448,6 +469,23 @@ public class JavaScriptLifter: Lifter {
                 w.decreaseIndentionLevel()
                 w.emit("}")
 
+            case is BeginSwitch:
+                w.emit("switch (\(input(0))) {")
+                w.emit("default:")
+                w.increaseIndentionLevel()
+
+            case let op as BeginSwitchCase:
+                if !op.fallsThrough {
+                    w.emit("break;")
+                }
+                w.decreaseIndentionLevel()
+                w.emit("case \(input(0)):")
+                w.increaseIndentionLevel()
+
+            case is EndSwitch:
+                w.decreaseIndentionLevel()
+                w.emit("}")
+
             case let op as BeginWhile:
                 let cond = BinaryExpression.new() <> input(0) <> " " <> op.comparator.token <> " " <> input(1)
                 w.emit("while (\(cond)) {")
@@ -517,6 +555,11 @@ public class JavaScriptLifter: Lifter {
             case is BeginCatch:
                 w.decreaseIndentionLevel()
                 w.emit("} catch(\(instr.innerOutput)) {")
+                w.increaseIndentionLevel()
+
+            case is BeginFinally:
+                w.decreaseIndentionLevel()
+                w.emit("} finally {")
                 w.increaseIndentionLevel()
 
             case is EndTryCatch:

@@ -134,7 +134,7 @@ public struct Type: Hashable {
     public static let regexp    = Type(definiteType: .regexp)
 
     /// Type one can iterate over
-    public static let iterable   = Type(definiteType: .iterable)
+    public static let iterable   = Type(definiteType: .iterable)        // TODO rename to .array?
     
     /// A value for which the type is not known.
     public static let unknown   = Type(definiteType: .unknown)
@@ -149,7 +149,7 @@ public struct Type: Hashable {
     public static let number: Type = .integer | .float
     
     /// A primitive: either a number, a string, a boolean, or a bigint.
-    public static let primitive: Type = .integer | .float | .string | .boolean | .bigint
+    public static let primitive: Type = .integer | .float | .string | .boolean
     
     /// Constructs an object type.
     public static func object(ofGroup group: String? = nil, withProperties properties: [String] = [], withMethods methods: [String] = []) -> Type {
@@ -785,6 +785,8 @@ struct BaseType: OptionSet, Hashable {
     // Base types
     static let nothing     = BaseType([])
     
+    // The compiler has these values hardcoded, in ProgramBuilder.ml.
+    // If these values are changed, make sure to update them there as well.
     static let undefined   = BaseType(rawValue: 1 << 0)
     static let integer     = BaseType(rawValue: 1 << 1)
     static let float       = BaseType(rawValue: 1 << 2)

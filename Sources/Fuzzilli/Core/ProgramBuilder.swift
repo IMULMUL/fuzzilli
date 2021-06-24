@@ -55,6 +55,14 @@ public class ProgramBuilder {
     /// Property names and integer values previously seen in the current program.
     private var seenPropertyNames = Set<String>()
     private var seenIntegers = Set<Int64>()
+    private var seenFloats = Set<Double>()
+
+    /// Keep track of existing variables containing known values. For the reuseOrLoadX APIs.
+    /// Important: these will contain variables that are no longer in scope. As such, they generally
+    /// have to be used in combination with the scope analyzer.
+    private var loadedBuiltins = VariableMap<String>()
+    private var loadedIntegers = VariableMap<Int64>()
+    private var loadedFloats = VariableMap<Double>()
 
     /// Various analyzers for the current program.
     private var scopeAnalyzer = ScopeAnalyzer()
@@ -85,6 +93,10 @@ public class ProgramBuilder {
         numVariables = 0
         seenPropertyNames.removeAll()
         seenIntegers.removeAll()
+        seenFloats.removeAll()
+        loadedBuiltins.removeAll()
+        loadedIntegers.removeAll()
+        loadedFloats.removeAll()
         code.removeAll()
         types = ProgramTypes()
         scopeAnalyzer = ScopeAnalyzer()
@@ -127,7 +139,7 @@ public class ProgramBuilder {
     /// Generates a random integer for the current program context.
     public func genInt() -> Int64 {
         // Either pick a previously seen integer or generate a random one
-        if probability(0.15) && seenIntegers.count >= 2 {
+        if probability(0.2) && seenIntegers.count >= 2 {
             return chooseUniform(from: seenIntegers)
         } else {
             return withEqualProbability({
@@ -189,11 +201,15 @@ public class ProgramBuilder {
     /// Generates a random integer for the current program context.
     public func genFloat() -> Double {
         // TODO improve this
-        return withEqualProbability({
-            chooseUniform(from: self.fuzzer.environment.interestingFloats)
-        }, {
-            Double.random(in: -1000000...1000000)
-        })
+        if probability(0.2) && seenFloats.count >= 2 {
+            return chooseUniform(from: seenFloats)
+        } else {
+            return withEqualProbability({
+                chooseUniform(from: self.fuzzer.environment.interestingFloats)
+            }, {
+                Double.random(in: -1000000...1000000)
+            })
+        }
     }
 
     /// Generates a random string value for the current program context.
@@ -464,6 +480,16 @@ public class ProgramBuilder {
         if type.Is(.bigint) || type.Is(fuzzer.environment.bigIntType) {
             return loadBigInt(genInt())
         }
+        if type.Is(.function()) {
+            let signature = type.signature ?? FunctionSignature(withParameterCount: Int.random(in: 2...5), hasRestParam: probability(0.1)) 
+            return definePlainFunction(withSignature: signature) { _ in
+                generateRecursive()
+                doReturn(value: randVar())
+            }
+        }
+        if type.Is(.regexp) || type.Is(fuzzer.environment.regExpType) {
+            return loadRegExp(genRegExp(), genRegExpFlags())
+        }
 
         assert(type.Is(.object()), "Unexpected type encountered \(type)")
 
@@ -477,12 +503,22 @@ public class ProgramBuilder {
         }
 
         if let group = type.group {
-            // We check this during Environment initialization, but let's keep this just in case.
-            assert(fuzzer.environment.type(ofBuiltin: group) != .unknown, "We don't know how to construct \(group)")
-            let constructionSignature = fuzzer.environment.type(ofBuiltin: group).constructorSignature!
-            let arguments = generateCallArguments(for: constructionSignature)
+            // Objects with predefined groups must be constructable through a Builtin exposed by the Environment.
+            // Normally, that builtin is a .constructor(), but we also allow just a .function() for constructing object.
+            // This is for example necessary for JavaScript Symbols, as the Symbol builtin is not a constructor.
+            let constructorType = fuzzer.environment.type(ofBuiltin: group)
+            assert(constructorType.Is(.function() | .constructor()), "We don't know how to construct \(group)")
+            assert(constructorType.signature != nil, "We don't know how to construct \(group) (missing signature for constructor)")
+            assert(constructorType.signature!.outputType.group == group, "We don't know how to construct \(group) (invalid signature for constructor)")
+            
+            let constructorSignature = constructorType.signature!
+            let arguments = generateCallArguments(for: constructorSignature)
             let constructor = loadBuiltin(group)
-            obj = construct(constructor, withArgs: arguments)
+            if !constructorType.Is(.constructor()) {
+                obj = callFunction(constructor, withArgs: arguments)
+            } else {
+                obj = construct(constructor, withArgs: arguments)
+            }
         } else {
             // Either generate a literal or use the store property stuff.
             if probability(0.8) { // Do the literal
@@ -742,7 +778,7 @@ public class ProgramBuilder {
             counter += 1
             idx = Int.random(in: 0..<program.size)
             // Some instructions are less suited to be the start of a splice. Skip them.
-        } while counter < 25 && (program.code[idx].isJump || program.code[idx].isBlockEnd || program.code[idx].isPrimitive || program.code[idx].isLiteral)
+        } while counter < 25 && (program.code[idx].isJump || program.code[idx].isBlockEnd || !program.code[idx].hasInputs)
 
         splice(from: program, at: idx)
     }
@@ -790,7 +826,7 @@ public class ProgramBuilder {
             assert(performSplicingDuringCodeGeneration || hasVisibleVariables)
             withEqualProbability({
                 guard self.performSplicingDuringCodeGeneration else { return }
-                let program = self.fuzzer.corpus.randomElement(increaseAge: false)
+                let program = self.fuzzer.corpus.randomElementForSplicing()
                 self.splice(from: program)
             }, {
                 // We can't run code generators if we don't have any visible variables.
@@ -827,6 +863,54 @@ public class ProgramBuilder {
             currentCodegenBudget = 1
         }
         generateInternal()
+    }
+
+    //
+    // Variable reuse APIs.
+    //
+    // These attempt to find an existing variable containing the desired value.
+    // If none exist, a new instruction is emitted to create it.
+    //
+    // This is generally an O(n) operation in the number of currently visible
+    // varialbes (~= current size of program). This should be fine since it is
+    // not too frequently used. Also, this way of implementing it keeps the
+    // overhead in internalAppend to a minimum, which is probably more important.
+    public func reuseOrLoadBuiltin(_ name: String) -> Variable {
+        for v in scopeAnalyzer.visibleVariables {
+            if let builtin = loadedBuiltins[v], builtin == name {
+                return v
+            }
+        }
+        return loadBuiltin(name)
+    }
+
+    public func reuseOrLoadInt(_ value: Int64) -> Variable {
+        for v in scopeAnalyzer.visibleVariables {
+            if let val = loadedIntegers[v], val == value {
+                return v
+            }
+        }
+        return loadInt(value)
+    }
+
+    public func reuseOrLoadAnyInt() -> Variable {
+        // This isn't guaranteed to succeed, but that's probably fine.
+        let val = seenIntegers.randomElement() ?? genInt()
+        return reuseOrLoadInt(val)
+    }
+
+    public func reuseOrLoadFloat(_ value: Double) -> Variable {
+        for v in scopeAnalyzer.visibleVariables {
+            if let val = loadedFloats[v], val == value {
+                return v
+            }
+        }
+        return loadFloat(value)
+    }
+
+    public func reuseOrLoadAnyFloat() -> Variable {
+        let val = seenFloats.randomElement() ?? genFloat()
+        return reuseOrLoadFloat(val)
     }
 
 
@@ -922,6 +1006,11 @@ public class ProgramBuilder {
     @discardableResult
     public func createArray(with initialValues: [Variable], spreading spreads: [Bool]) -> Variable {
         return perform(CreateArrayWithSpread(numInitialValues: initialValues.count, spreads: spreads), withInputs: initialValues).output
+    }
+
+    @discardableResult
+    public func createTemplateString(from parts: [String], interpolating interpolatedValues: [Variable]) -> Variable {
+        return perform(CreateTemplateString(parts: parts), withInputs: interpolatedValues).output
     }
 
     @discardableResult
@@ -1062,6 +1151,11 @@ public class ProgramBuilder {
     }
 
     @discardableResult
+    public func callComputedMethod(_ name: Variable, on object: Variable, withArgs arguments: [Variable]) -> Variable {
+        return perform(CallComputedMethod(numArguments: arguments.count), withInputs: [object, name] + arguments).output
+    }
+
+    @discardableResult
     public func callFunction(_ function: Variable, withArgs arguments: [Variable]) -> Variable {
         return perform(CallFunction(numArguments: arguments.count), withInputs: [function] + arguments).output
     }
@@ -1086,6 +1180,10 @@ public class ProgramBuilder {
         return perform(BinaryOperation(op), withInputs: [lhs, rhs]).output
     }
 
+    public func binaryOpAndReassign(_ output: Variable, to input: Variable, with op: BinaryOperator) {
+        perform(BinaryOperationAndReassign(op), withInputs: [output, input])
+    }
+
     @discardableResult
     public func dup(_ v: Variable) -> Variable {
         return perform(Dup(), withInputs: [v]).output
@@ -1098,6 +1196,11 @@ public class ProgramBuilder {
     @discardableResult
     public func compare(_ lhs: Variable, _ rhs: Variable, with comparator: Comparator) -> Variable {
         return perform(Compare(comparator), withInputs: [lhs, rhs]).output
+    }
+
+    @discardableResult
+    public func conditional(_ condition: Variable, _ lhs: Variable, _ rhs: Variable) -> Variable {
+        return perform(ConditionalOperation(), withInputs: [condition, lhs, rhs]).output
     }
 
     public func eval(_ string: String, with arguments: [Variable] = []) {
@@ -1213,6 +1316,35 @@ public class ProgramBuilder {
         perform(EndIf())
     }
 
+    public struct SwitchBuilder {
+        public typealias SwitchCaseGenerator = () -> ()
+        fileprivate var defaultCaseGenerator: SwitchCaseGenerator? = nil
+        fileprivate var caseGenerators: [(value: Variable, fallsthrough: Bool, body: SwitchCaseGenerator)] = []
+
+        public mutating func addDefault(_ generator: @escaping SwitchCaseGenerator) {
+            assert(defaultCaseGenerator == nil)
+            defaultCaseGenerator = generator
+        }
+
+        public mutating func add(_ v: Variable, fallsThrough: Bool = false, body: @escaping SwitchCaseGenerator) {
+            assert(defaultCaseGenerator != nil, "Default case must be generated first due to the way FuzzIL represents switch statements")
+            caseGenerators.append((v, fallsThrough, body))
+        }
+    }
+
+    public func doSwitch(on v: Variable, body: (inout SwitchBuilder) -> ()) {
+        var builder = SwitchBuilder()
+        body(&builder)
+
+        perform(BeginSwitch(), withInputs: [v])
+        builder.defaultCaseGenerator?()
+        for (val, fallsThrough, bodyGenerator) in builder.caseGenerators {
+            perform(BeginSwitchCase(fallsThrough: fallsThrough), withInputs: [val])
+            bodyGenerator()
+        }
+        perform(EndSwitch())
+    }
+
     public func whileLoop(_ lhs: Variable, _ comparator: Comparator, _ rhs: Variable, _ body: () -> Void) {
         perform(BeginWhile(comparator: comparator), withInputs: [lhs, rhs])
         body()
@@ -1261,6 +1393,11 @@ public class ProgramBuilder {
         body(exception)
     }
 
+    public func beginFinally(_ body: () -> Void) {
+        perform(BeginFinally())
+        body()
+    }
+
     public func endTryCatch() {
         perform(EndTryCatch())
     }
@@ -1305,6 +1442,8 @@ public class ProgramBuilder {
         // Update our analyses
         scopeAnalyzer.analyze(instr)
         contextAnalyzer.analyze(instr)
+        // TODO could this become an Analyzer?
+        updateValueAnalysis(instr)
         if instr.op is BeginAnyFunctionDefinition {
             openFunctions.append(instr.output)
         } else if instr.op is EndAnyFunctionDefinition {
@@ -1322,17 +1461,21 @@ public class ProgramBuilder {
             assert(type != types.getType(of: variable, after: code.lastInstruction.index) || type == .unknown)
             types.setType(of: variable, to: type, after: code.lastInstruction.index, quality: .inferred)
         }
-
-        updateConstantPool(instr.op)
     }
 
-    /// Update the set of previously seen property names and integer values with the provided operation.
-    private func updateConstantPool(_ operation: Operation) {
-        switch operation {
+    /// Update value analysis. In particular the set of seen values and the variables that contain them for variable reuse.
+    private func updateValueAnalysis(_ instr: Instruction) {
+        switch instr.op {
         case let op as LoadInteger:
             seenIntegers.insert(op.value)
+            loadedIntegers[instr.output] = op.value
         case let op as LoadBigInt:
             seenIntegers.insert(op.value)
+        case let op as LoadFloat:
+            seenFloats.insert(op.value)
+            loadedFloats[instr.output] = op.value
+        case let op as LoadBuiltin:
+            loadedBuiltins[instr.output] = op.builtinName
         case let op as LoadProperty:
             seenPropertyNames.insert(op.propertyName)
         case let op as StoreProperty:
@@ -1349,6 +1492,15 @@ public class ProgramBuilder {
             seenPropertyNames.formUnion(op.propertyNames)
         default:
             break
+        }
+
+        for v in instr.inputs {
+            if instr.reassigns(v) {
+                // Remove input from loaded variable sets
+                loadedBuiltins.removeValue(forKey: v)
+                loadedIntegers.removeValue(forKey: v)
+                loadedFloats.removeValue(forKey: v)
+            }
         }
     }
 }

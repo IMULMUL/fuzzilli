@@ -82,6 +82,11 @@ public class FuzzILLifter: Lifter {
             }
             w.emit("\(instr.output) <- CreateArrayWithSpread [\(elems.joined(separator: ", "))]")
 
+        case let op as CreateTemplateString:
+            let parts = op.parts.map({ "'\($0)'" }).joined(separator: ", ")
+            let values = instr.inputs.map({ $0.identifier }).joined(separator: ", ")
+            w.emit("\(instr.output) <- CreateTemplateString [\(parts)], [\(values)]")
+
         case let op as LoadBuiltin:
             w.emit("\(instr.output) <- LoadBuiltin '\(op.builtinName)'")
 
@@ -150,6 +155,10 @@ public class FuzzILLifter: Lifter {
             let arguments = instr.inputs.dropFirst().map({ $0.identifier })
             w.emit("\(instr.output) <- CallMethod \(input(0)), '\(op.methodName)', [\(arguments.joined(separator: ", "))]")
 
+        case is CallComputedMethod:
+            let arguments = instr.inputs.dropFirst(2).map({ $0.identifier })
+            w.emit("\(instr.output) <- CallComputedMethod \(input(0)), \(input(1)), [\(arguments.joined(separator: ", "))]")
+
         case is Construct:
             let arguments = instr.inputs.dropFirst().map({ $0.identifier })
             w.emit("\(instr.output) <- Construct \(input(0)), [\(arguments.joined(separator: ", "))]")
@@ -175,6 +184,9 @@ public class FuzzILLifter: Lifter {
         case let op as BinaryOperation:
             w.emit("\(instr.output) <- BinaryOperation \(input(0)), '\(op.op.token)', \(input(1))")
 
+        case let op as BinaryOperationAndReassign:
+            w.emit("\(instr.input(0)) <- BinaryOperationAndReassign '\(op.op.token)', \(input(1))")
+
         case is Dup:
             w.emit("\(instr.output) <- Dup \(input(0))")
 
@@ -183,6 +195,9 @@ public class FuzzILLifter: Lifter {
 
         case let op as Compare:
             w.emit("\(instr.output) <- Compare \(input(0)), '\(op.op.token)', \(input(1))")
+
+        case is ConditionalOperation:
+            w.emit("\(instr.output) <- \(input(0)), \(input(1)), \(input(2))")
 
         case let op as Eval:
             let args = instr.inputs.map({ $0.identifier }).joined(separator: ", ")
@@ -217,6 +232,23 @@ public class FuzzILLifter: Lifter {
         case is EndIf:
             w.decreaseIndentionLevel()
             w.emit("EndIf")
+
+        case is BeginSwitch:
+            w.emit("BeginSwitch \(input(0))")
+            w.emit("DefaultCase")
+            w.increaseIndentionLevel()
+
+        case let op as BeginSwitchCase:
+            if !op.fallsThrough {
+                w.emit ("Break")
+            }
+            w.decreaseIndentionLevel()
+            w.emit("BeginSwitchCase \(input(0))")
+            w.increaseIndentionLevel()
+
+        case is EndSwitch:
+            w.decreaseIndentionLevel()
+            w.emit("EndSwitch")
 
        case let op as BeginClassDefinition:
            var line = "\(instr.output) <- BeginClassDefinition"
@@ -309,6 +341,11 @@ public class FuzzILLifter: Lifter {
         case is BeginCatch:
             w.decreaseIndentionLevel()
             w.emit("BeginCatch -> \(instr.innerOutput)")
+            w.increaseIndentionLevel()
+
+        case is BeginFinally:
+            w.decreaseIndentionLevel()
+            w.emit("BeginFinally")
             w.increaseIndentionLevel()
 
         case is EndTryCatch:

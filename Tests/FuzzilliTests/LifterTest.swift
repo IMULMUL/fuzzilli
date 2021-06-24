@@ -363,6 +363,343 @@ class LifterTests: XCTestCase {
 
         XCTAssertEqual(lifted_program,expected_program)
     }
+
+    func testHoleyArrayLifting(){
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        var initialValues = [Variable]()
+        initialValues.append(b.loadInt(1))
+        initialValues.append(b.loadInt(2))
+        initialValues.append(b.loadUndefined())
+        initialValues.append(b.loadInt(4))
+        initialValues.append(b.loadUndefined())
+        initialValues.append(b.loadInt(6))
+        let v = b.loadString("foobar")
+        b.reassign(v, to: b.loadUndefined())
+        initialValues.append(v)
+        b.createArray(with: initialValues)
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+
+        let expected_program = """
+        let v6 = "foobar";
+        v6 = undefined;
+        const v8 = [1,2,,4,,6,v6];
+
+        """
+        XCTAssertEqual(lifted_program,expected_program)
+
+    }
+
+    func testTryCatchFinallyLifting(){
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let f = b.definePlainFunction(withSignature: FunctionSignature(withParameterCount: 3)) { args in
+            b.beginTry() {
+                let v = b.binary(args[0], args[1], with: .Mul)
+                b.doReturn(value: v)
+            }
+            b.beginCatch() { _ in
+                let v4 = b.createObject(with: ["a" : b.loadInt(1337)])
+                b.reassign(args[0], to: v4)
+            }
+            b.beginFinally() {
+                let v = b.binary(args[0], args[1], with: .Add)
+                b.doReturn(value: v)
+            }
+            b.endTryCatch()
+        }
+        b.callFunction(f, withArgs: [b.loadBool(true), b.loadInt(1)])
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+
+        let expected_program = """
+        function v0(v1,v2,v3) {
+            try {
+                const v4 = v1 * v2;
+                return v4;
+            } catch(v5) {
+                const v7 = {a:1337};
+                v1 = v7;
+            } finally {
+                const v8 = v1 + v2;
+                return v8;
+            }
+        }
+        const v11 = v0(true,1);
+
+        """
+
+        XCTAssertEqual(lifted_program,expected_program)
+    }
+
+    func testTryCatchLifting(){
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let f = b.definePlainFunction(withSignature: FunctionSignature(withParameterCount: 3)) { args in
+            b.beginTry() {
+                let v = b.binary(args[0], args[1], with: .Mul)
+                b.doReturn(value: v)
+            }
+            b.beginCatch() { _ in
+                let v4 = b.createObject(with: ["a" : b.loadInt(1337)])
+                b.reassign(args[0], to: v4)
+            }
+            b.endTryCatch()
+        }
+        b.callFunction(f, withArgs: [b.loadBool(true), b.loadInt(1)])
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+        let expected_program = """
+        function v0(v1,v2,v3) {
+            try {
+                const v4 = v1 * v2;
+                return v4;
+            } catch(v5) {
+                const v7 = {a:1337};
+                v1 = v7;
+            }
+        }
+        const v10 = v0(true,1);
+
+        """
+
+        XCTAssertEqual(lifted_program,expected_program)
+    }
+
+    func testTryFinallyLifting(){
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let f = b.definePlainFunction(withSignature: FunctionSignature(withParameterCount: 3)) { args in
+            b.beginTry() {
+                let v = b.binary(args[0], args[1], with: .Mul)
+                b.doReturn(value: v)
+            }
+            b.beginFinally() {
+                let v = b.binary(args[0], args[1], with: .Add)
+                b.doReturn(value: v)
+            }
+            b.endTryCatch()
+        }
+        b.callFunction(f, withArgs: [b.loadBool(true), b.loadInt(1)])
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+        let expected_program = """
+        function v0(v1,v2,v3) {
+            try {
+                const v4 = v1 * v2;
+                return v4;
+            } finally {
+                const v5 = v1 + v2;
+                return v5;
+            }
+        }
+        const v8 = v0(true,1);
+
+        """
+
+        XCTAssertEqual(lifted_program,expected_program)
+    }
+
+    func testComputedMethodLifting(){
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let v0 = b.loadString("Hello World")
+        let v1 = b.loadBuiltin("Symbol")
+        let v2 = b.loadProperty("iterator", of: v1)
+        let v3 = b.callComputedMethod(v2, on: v0, withArgs: [])
+        let _ = b.callMethod("next", on: v3, withArgs: [])
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+        let expected_program = """
+        const v2 = Symbol.iterator;
+        const v3 = "Hello World"[v2]();
+        const v4 = v3.next();
+
+        """
+
+        XCTAssertEqual(lifted_program,expected_program)
+    }
+
+    func testConditionalOperationLifting(){
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let v1 = b.createObject(with: ["a" : b.loadInt(1337)])
+        let v2 = b.loadProperty("a", of: v1)
+        let v3 = b.loadInt(10)
+        let v4 = b.compare(v2, v3, with: .greaterThan)
+        let _ = b.conditional(v4, v2, v3)
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+        let expected_program = """
+        const v1 = {a:1337};
+        const v2 = v1.a;
+        const v4 = v2 > 10;
+        const v5 = v4 ? v2 : 10;
+
+        """
+        XCTAssertEqual(lifted_program,expected_program)
+    }
+
+    func testSwitchStatementLifting(){
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let v0 = b.loadInt(42)
+        let v1 = b.createObject(with: ["foo": v0])
+        let v2 =  b.loadProperty("foo", of: v1)
+        let v3 = b.loadInt(1337)
+        let v4 = b.loadString("42")
+        let v5 = b.loadFloat(13.37)
+
+        b.doSwitch(on: v2) { cases in
+            cases.addDefault {
+                b.storeProperty(v5, as: "foo", on: v1)
+            }
+            cases.add(v3, fallsThrough: false){
+                b.storeProperty(v3, as: "bar", on: v1)
+            }
+            cases.add(v4, fallsThrough: true){
+                b.storeProperty(v4, as: "baz", on: v1)
+            }
+            cases.add(v0, fallsThrough: false) {
+                b.storeProperty(v2, as: "bla", on: v1)
+            }
+        }
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+        let expected_program = """
+        const v1 = {foo:42};
+        const v2 = v1.foo;
+        switch (v2) {
+        default:
+            v1.foo = 13.37;
+            break;
+        case 1337:
+            v1.bar = 1337;
+        case "42":
+            v1.baz = "42";
+            break;
+        case 42:
+            v1.bla = v2;
+        }
+
+        """
+
+        XCTAssertEqual(lifted_program,expected_program)
+    }
+
+    func testBinaryOperationReassignLifting(){
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let v0 = b.loadInt(1337)
+        let v1 = b.loadFloat(13.37)
+        b.binaryOpAndReassign(v0, to: v1, with: .Add)
+        b.binaryOpAndReassign(v0, to: v1, with: .Mul)
+        b.binaryOpAndReassign(v0, to: v1, with: .LShift)
+
+        let v2 = b.loadString("hello")
+        let v3 = b.loadString("world")
+        b.binaryOpAndReassign(v2, to: v3, with: .Add)
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+        let expected_program = """
+        let v0 = 1337;
+        v0 += 13.37;
+        v0 *= 13.37;
+        v0 <<= 13.37;
+        let v2 = "hello";
+        v2 += "world";
+
+        """
+
+        XCTAssertEqual(lifted_program,expected_program)
+    }
+
+    /// Verifies that all variables that are reassigned through either
+    ///
+    /// a .PostInc and .PreInc UnaryOperation,
+    /// a Reassign instruction, or
+    /// a BinaryOperationAndReassign instruction
+    func testVariableAnalyzer() {
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let v0 = b.loadInt(1337)
+        let v1 = b.loadFloat(13.37)
+        b.binaryOpAndReassign(v0, to: v1, with: .Add)
+        let v2 = b.loadString("Hello")
+        b.reassign(v1, to: v2)
+        let v3 = b.loadInt(1336)
+        let v4 = b.unary(.PreInc, v3)
+        b.unary(.PostInc, v4)
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+        let expected_program = """
+        let v0 = 1337;
+        let v1 = 13.37;
+        v0 += v1;
+        v1 = "Hello";
+        let v3 = 1336;
+        let v4 = ++v3;
+        const v5 = v4++;
+
+        """
+        
+        XCTAssertEqual(lifted_program,expected_program)
+    }
+
+    func testCreateTemplateLifting(){
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let v0 = b.loadInt(1337)
+        let _ = b.createTemplateString(from: [""], interpolating: [])
+        let v2 = b.createTemplateString(from: ["Hello", "World"], interpolating: [v0])
+        let v3 = b.createObject(with: ["foo": v0])
+        let v4 = b.loadProperty("foo", of: v3)
+        let _ = b.createTemplateString(from: ["bar", "baz"], interpolating: [v4])
+        let _ = b.createTemplateString(from: ["test", "inserted", "template"], interpolating: [v4, v2] )
+
+        let program = b.finalize()
+
+        let lifted_program = fuzzer.lifter.lift(program)
+        let expected_program = """
+        const v1 = ``;
+        const v3 = {foo:1337};
+        const v4 = v3.foo;
+        const v5 = `bar${v4}baz`;
+        const v6 = `test${v4}inserted${`Hello${1337}World`}template`;
+
+        """
+
+        XCTAssertEqual(lifted_program,expected_program)
+    }
 }
 
 extension LifterTests {
@@ -376,6 +713,16 @@ extension LifterTests {
             ("testDoWhileLifting", testDoWhileLifting),
             ("testBlockStatements", testBlockStatements),
             ("testAsyncGeneratorLifting", testAsyncGeneratorLifting),
+            ("testHoleyArray", testHoleyArrayLifting),
+            ("testTryCatchFinallyLifting", testTryCatchFinallyLifting),
+            ("testTryCatchLifting", testTryCatchLifting),
+            ("testTryFinallyLifting", testTryFinallyLifting),
+            ("testComputedMethodLifting", testComputedMethodLifting),
+            ("testConditionalOperationLifting", testConditionalOperationLifting),
+            ("testBinaryOperationReassignLifting", testBinaryOperationReassignLifting),
+            ("testVariableAnalyzer", testVariableAnalyzer),
+            ("testSwitchStatementLifting", testSwitchStatementLifting),
+            ("testCreateTemplateLifting", testCreateTemplateLifting),
         ]
     }
 }

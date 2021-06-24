@@ -602,6 +602,128 @@ class AbstractInterpreterTests: XCTestCase {
         }
         XCTAssertEqual(b.type(of: cls), .constructor([.string] => instanceType))
     }
+
+    func testBigintTypeTracking() {
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let i1 = b.loadInt(42)
+        let i2 = b.loadInt(43)
+        XCTAssert(b.type(of: i1).Is(.integer))
+        let bi1 = b.loadBigInt(4200000000)
+        let bi2 = b.loadBigInt(4300000000)
+        XCTAssert(b.type(of: bi1).Is(.bigint))
+
+        for op in allUnaryOperators {
+            // Logical operators produce .boolean in any case
+            guard op != .LogicalNot else { continue }
+            let r1 = b.unary(op, i1)
+            XCTAssertFalse(b.type(of: r1).MayBe(.bigint))
+            let r2 = b.unary(op, bi1)
+            XCTAssert(b.type(of: r2).Is(.bigint))
+        }
+
+        for op in allBinaryOperators {
+            // Logical operators produce .boolean in any case
+            guard op != .LogicOr && op != .LogicAnd else { continue }
+            let r1 = b.binary(i1, i2, with: op)
+            XCTAssertFalse(b.type(of: r1).MayBe(.bigint))
+            let r2 = b.binary(i1, bi2, with: op)
+            // This isn't really necessary, as mixing types in this way
+            // would lead to an exception in JS. Currently, we handle
+            // it like this though.
+            XCTAssert(b.type(of: r2).MayBe(.bigint))
+            let r3 = b.binary(bi1, bi2, with: op)
+            XCTAssert(b.type(of: r3).Is(.bigint))
+        }
+
+        for op in allBinaryOperators {
+            let i3 = b.loadInt(45)
+            let i4 = b.loadInt(46)
+            XCTAssert(b.type(of: i3).Is(.integer))
+            let bi3 = b.loadBigInt(4200000000)
+            let bi4 = b.loadBigInt(4300000000)
+            XCTAssert(b.type(of: bi3).Is(.bigint))
+
+            // Logical operators produce .boolean in any case
+            guard op != .LogicOr && op != .LogicAnd else { continue }
+            b.binaryOpAndReassign(i3, to: i4, with: op)
+            XCTAssertFalse(b.type(of: i3).MayBe(.bigint))
+            b.binaryOpAndReassign(i3, to: bi4, with: op)
+            // This isn't really necessary, as mixing types in this way
+            // would lead to an exception in JS. Currently, we handle
+            // it like this though.
+            XCTAssert(b.type(of: i3).MayBe(.bigint))
+            b.binaryOpAndReassign(bi3, to: bi4, with: op)
+            XCTAssert(b.type(of: bi3).Is(.bigint))
+        }
+    }
+    
+    func testSwitchStatementHandling() {
+        let fuzzer = makeMockFuzzer()
+        let b = fuzzer.makeBuilder()
+
+        let v0 = b.loadInt(42)
+        let v1 = b.createObject(with: ["foo": v0])
+        let v2 = b.loadProperty("foo", of: v1)
+        let v3 = b.loadInt(1337)
+        let v4 = b.loadString("42")
+
+        b.doSwitch(on: v2){ cases in
+            cases.addDefault {
+                XCTAssertEqual(b.type(of: v1), .object(withProperties: ["foo"]))
+                b.storeProperty(v0, as: "bar", on: v1)
+                b.storeProperty(v0, as: "qux", on: v1)
+                XCTAssertEqual(b.type(of: v1), .object(withProperties: ["foo", "bar", "qux"]))
+
+                XCTAssertEqual(b.type(of: v0), .integer)
+                let newObj = b.createObject(with: ["quux": v4])
+                b.reassign(v0, to: newObj)
+                XCTAssertEqual(b.type(of: v0), .object(withProperties: ["quux"]))
+            }
+            cases.add(v3) {
+                XCTAssertEqual(b.type(of: v1), .object(withProperties: ["foo"]))
+                b.storeProperty(v0, as: "bar", on: v1)
+                b.storeProperty(v0, as: "baz", on: v1)
+                XCTAssertEqual(b.type(of: v1), .object(withProperties: ["foo", "bar", "baz"]))
+
+                XCTAssertEqual(b.type(of: v0), .integer)
+                let stringVar = b.loadString("foobar")
+                b.reassign(v0, to: stringVar)
+                XCTAssertEqual(b.type(of: v0), .string)
+            }
+            cases.add(v4){
+                XCTAssertEqual(b.type(of: v1), .object(withProperties: ["foo"]))
+                b.storeProperty(v0, as: "bar", on: v1)
+                b.storeProperty(v0, as: "bla", on: v1)
+                XCTAssertEqual(b.type(of: v1), .object(withProperties: ["foo", "bar", "bla"]))
+
+                XCTAssertEqual(b.type(of: v0), .integer)
+                let floatVar = b.loadFloat(13.37)
+                b.reassign(v0, to: floatVar)
+                XCTAssertEqual(b.type(of: v0), .float)
+            }
+        }
+
+        XCTAssertEqual(b.type(of: v0), .float | .string | .object())
+        XCTAssertEqual(b.type(of: v1), .object(withProperties: ["foo", "bar"]))
+
+        // Test another program using switch
+        b.reset()
+
+        let v6 = b.loadInt(42)
+        let v7 = b.loadInt(42)
+        XCTAssertEqual(b.type(of: v6), .integer)
+        XCTAssertEqual(b.type(of: v7), .integer)
+        b.doSwitch(on: v6) { cases in
+            cases.addDefault {
+                b.reassign(v7, to: b.loadString("bar"))
+            }
+        }
+
+        XCTAssertEqual(b.type(of: v6), .integer)
+        XCTAssertEqual(b.type(of: v7), .string)
+    }
 }
 
 extension AbstractInterpreterTests {
@@ -625,6 +747,8 @@ extension AbstractInterpreterTests {
             ("testArrayCreation", testArrayCreation),
             ("testClasses", testClasses),
             ("testSuperBinding", testSuperBinding),
+            ("testBigintTypeTracking", testBigintTypeTracking),
+            ("testSwitchStatementHandling",testSwitchStatementHandling),
         ]
     }
 }
